@@ -1,12 +1,12 @@
 import flet as ft
-from flet import Column, ListView, TextField, IconButton, Container, Row, Button, ProgressRing
+from flet import Column, ListView, TextField, Container, Row, FilledButton, ProgressBar, AppBar, IconButton, Text
 from datetime import datetime
 from ..models.schemas import Message
 from ..widgets.message_bubble import MessageBubble, LoadingIndicator
 
 
 class ChatScreen(Column):
-    def __init__(self, pg, services, lang: str = "en", **kwargs):
+    def __init__(self, pg, services, lang: str = "en", app=None, **kwargs):
         super().__init__(**kwargs)
         self.services = services
         self.lang = lang
@@ -14,6 +14,19 @@ class ChatScreen(Column):
         self.conversation_id = 1
         self.is_loading = False
         self._page = pg
+        self.app = app
+        
+        self.app_bar = AppBar(
+            title=Text("AI Companion", size=20, weight=ft.FontWeight.W_500),
+            leading=IconButton(
+                icon=ft.Icon(ft.Icons.SETTINGS, size=24),
+                on_click=self.open_settings,
+                tooltip="Настройки",
+            ),
+            leading_width=48,
+            elevation=1,
+            bgcolor=ft.Colors.SURFACE,
+        )
         
         self.messages_list = ListView(
             expand=True,
@@ -22,30 +35,39 @@ class ChatScreen(Column):
         )
         
         self.input_field = TextField(
-            hint_text="Type a message...",
+            hint_text="Напишите сообщение...",
             multiline=True,
-            max_lines=3,
+            max_lines=4,
             expand=True,
+            filled=True,
+            border_color=ft.Colors.PRIMARY,
+            cursor_color=ft.Colors.PRIMARY,
+            text_style=ft.TextStyle(size=15),
+            hint_style=ft.TextStyle(color=ft.Colors.ON_SURFACE_VARIANT),
             on_submit=self.send_message,
         )
         
-        self.send_button = IconButton(
-            icon=ft.Text("⬆️", size=20),
+        self.send_button = FilledButton(
+            content=Text("Отправить", weight=ft.FontWeight.W_500),
             on_click=self.send_message,
+            style=ft.ButtonStyle(
+                padding=ft.padding.symmetric(horizontal=16, vertical=12),
+            ),
         )
         
         self.loading_indicator = None
-        self.processing_indicator = None
         
         self.controls = [
+            self.app_bar,
             self.messages_list,
             Container(
                 content=Row([
                     self.input_field,
                     self.send_button,
-                ], spacing=5),
-                padding=10,
-                border=ft.border.only(top=ft.border.BorderSide(1, ft.Colors.OUTLINE)),
+                ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.END),
+                padding=15,
+                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGH,
+                border=ft.border.only(top=ft.border.BorderSide(1, ft.Colors.OUTLINE_VARIANT)),
             )
         ]
         
@@ -54,6 +76,11 @@ class ChatScreen(Column):
     def get_text(self, key: str) -> str:
         from ..i18n import get_translation
         return get_translation(self.lang, key)
+
+    def open_settings(self, e=None):
+        if self.app:
+            self.app.set_screen(1)
+            self.app.page.update()
 
     async def load_messages(self):
         self.messages = await self.services.db.get_messages(self.conversation_id)
@@ -77,6 +104,7 @@ class ChatScreen(Column):
             return
         
         self.input_field.value = ""
+        self.input_field.update()
         self.is_loading = True
         
         user_message = Message(
@@ -91,18 +119,11 @@ class ChatScreen(Column):
         self.messages_list.controls.append(
             MessageBubble(role="user", content=user_text)
         )
-        
+
+        await self.scroll_to_bottom()
+
         self.loading_indicator = LoadingIndicator(self.get_text("thinking"))
         self.messages_list.controls.append(self.loading_indicator)
-        
-        self.processing_indicator = Container(
-            content=Row([
-                ProgressRing(width=16, height=16),
-                ft.Text(self.get_text("thinking"), size=12, color=ft.Colors.PRIMARY)
-            ], spacing=5),
-            padding=5,
-        )
-        self.messages_list.controls.append(self.processing_indicator)
         
         self._page.update()
         
@@ -115,9 +136,29 @@ class ChatScreen(Column):
                 self.messages_list.controls.remove(self.loading_indicator)
                 self.loading_indicator = None
             
-            if self.processing_indicator:
-                self.messages_list.controls.remove(self.processing_indicator)
-                self.processing_indicator = None
+            if response == "__CONTEXT_LIMIT__":
+                self.messages_list.controls.remove(
+                    self.messages_list.controls[-1]
+                )
+                
+                summary = await self.services.ai.summarize_conversation(self.messages)
+                
+                await self.services.db.clear_conversation_messages(self.conversation_id)
+                
+                summary_message = Message(
+                    role="assistant",
+                    content=f"📝 Краткое содержание предыдущего разговора:\n\n{summary}\n\n--- Разговор продолжается ---",
+                    conversation_id=self.conversation_id
+                )
+                await self.services.db.add_message(summary_message)
+                
+                self.messages = [summary_message]
+                self.messages_list.controls.clear()
+                self.messages_list.controls.append(
+                    MessageBubble(role="assistant", content=summary_message.content)
+                )
+                
+                response = await self.services.ai.generate(user_text, [summary_message])
             
             assistant_message = Message(
                 role="assistant",
@@ -140,8 +181,6 @@ class ChatScreen(Column):
         except Exception as ex:
             if self.loading_indicator:
                 self.messages_list.controls.remove(self.loading_indicator)
-            if self.processing_indicator:
-                self.messages_list.controls.remove(self.processing_indicator)
             
             error_msg = f"Error: {str(ex)}"
             self.messages_list.controls.append(
@@ -149,4 +188,5 @@ class ChatScreen(Column):
             )
         
         self.is_loading = False
+        await self.scroll_to_bottom()
         self._page.update()

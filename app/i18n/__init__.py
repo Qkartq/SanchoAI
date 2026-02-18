@@ -43,6 +43,12 @@ translations = {
         "version": "Version",
         "save": "Save",
         "close": "Close",
+        "status_idle": "Idle...",
+        "status_loading": "Loading model...",
+        "status_generating": "Generating response...",
+        "status_ready": "Model ready",
+        "input_hint": "Type a message...",
+        "send_button": "Send",
     },
     "ru": {
         "app_name": "ИИ Помощник",
@@ -88,6 +94,12 @@ translations = {
         "version": "Версия",
         "save": "Сохранить",
         "close": "Закрыть",
+        "status_idle": "Ожидание...",
+        "status_loading": "Загрузка модели...",
+        "status_generating": "Генерация ответа...",
+        "status_ready": "Модель готова",
+        "input_hint": "Напишите сообщение...",
+        "send_button": "Отправить",
     }
 }
 

@@ -132,6 +132,10 @@ class DBService:
         await self._connection.execute("DELETE FROM messages")
         await self._connection.execute("DELETE FROM conversations")
         await self._connection.commit()
+    
+    async def clear_conversation_messages(self, conversation_id: int):
+        await self._connection.execute("DELETE FROM messages WHERE conversation_id = ?", (conversation_id,))
+        await self._connection.commit()
 
     async def export_conversation_json(self, conversation_id: int) -> dict:
         conv = await self.get_conversation(conversation_id)
