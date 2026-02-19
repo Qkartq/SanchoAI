@@ -8,14 +8,14 @@ class ModelStatus:
     READY = "ready"
     IDLE = "idle"
     GENERATING = "generating"
+    ERROR = "error"
 
 
 class AIService:
-    def __init__(self, model_path: str = None):
-        self.model_path = model_path or os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-            "google_gemma-3-1b-it-Q5_K_M.gguf"
-        )
+    def __init__(self, model_path: str = None, mmproj_path: str = None):
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        self.model_path = model_path or os.path.join(base_dir, "gemma-3-4b-it-Q3_K_M.gguf")
+        self.mmproj_path = mmproj_path or os.path.join(base_dir, "mmproj-model-f16.gguf")
         self.model = None
         self._is_ready = False
         self.status = ModelStatus.LOADING
@@ -32,7 +32,7 @@ class AIService:
     def initialize(self):
         try:
             from llama_cpp import Llama
-            n_ctx = 1024
+            n_ctx = 4096
             n_threads = 4
             
             self._update_status(ModelStatus.LOADING)
@@ -43,6 +43,7 @@ class AIService:
                 n_threads=n_threads,
                 n_gpu_layers=0,
                 verbose=False,
+                mmproj=self.mmproj_path,
             )
             self._is_ready = True
             self._update_status(ModelStatus.READY)
@@ -50,7 +51,7 @@ class AIService:
         except Exception as e:
             print(f"Error loading model: {e}")
             self._is_ready = False
-            self._update_status(ModelStatus.IDLE)
+            self._update_status(ModelStatus.ERROR)
 
     def set_system_prompt(self, prompt: str):
         self.system_prompt = prompt
@@ -73,13 +74,45 @@ class AIService:
             messages.append({"role": "system", "content": self.system_prompt})
         
         if conversation_history:
-            prev_role = None
             for msg in conversation_history:
-                if msg.role != prev_role:
+                if msg.role in ["user", "assistant", "system"]:
                     messages.append({"role": msg.role, "content": msg.content})
-                    prev_role = msg.role
         
         messages.append({"role": "user", "content": message})
+
+        try:
+            output = self.model.create_chat_completion(
+                messages=messages,
+                temperature=0.7,
+                max_tokens=512,
+                stream=False,
+            )
+            self._update_status(ModelStatus.READY)
+            return output["choices"][0]["message"]["content"]
+        except Exception as e:
+            self._update_status(ModelStatus.READY)
+            error_msg = str(e)
+            if "context window" in error_msg.lower() or "tokens" in error_msg.lower():
+                return "__CONTEXT_LIMIT__"
+            return f"Error: {error_msg}"
+
+    async def continue_generation(self, conversation_history: List[Message]) -> str:
+        if not self._is_ready or not self.model:
+            return "Error: AI model not loaded."
+
+        self._update_status(ModelStatus.GENERATING)
+
+        messages = []
+        
+        if hasattr(self, 'system_prompt') and self.system_prompt:
+            messages.append({"role": "system", "content": self.system_prompt})
+        
+        if conversation_history:
+            for msg in conversation_history:
+                if msg.role in ["user", "assistant", "system"]:
+                    messages.append({"role": msg.role, "content": msg.content})
+        
+        messages.append({"role": "user", "content": "Продолжи ответ."})
 
         try:
             output = self.model.create_chat_completion(

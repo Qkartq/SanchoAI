@@ -11,14 +11,22 @@ class MessageBubble(Container):
         alignment = ft.Alignment(1, 0) if is_user else ft.Alignment(-1, 0)
         margin = ft.margin.only(left=50, right=0) if is_user else ft.margin.only(left=0, right=50)
         
+        if is_user:
+            self.text_control = ft.Text(
+                content,
+                color=text_color,
+                size=14,
+                selectable=True,
+            )
+        else:
+            self.text_control = ft.Markdown(
+                content,
+                selectable=True,
+            )
+        
         super().__init__(
             content=ft.Column([
-                ft.Text(
-                    content,
-                    color=text_color,
-                    size=14,
-                    selectable=True,
-                )
+                self.text_control
             ], tight=True, spacing=5),
             alignment=alignment,
             margin=margin,

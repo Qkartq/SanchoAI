@@ -93,7 +93,7 @@ async def main(page: ft.Page):
     if app.services.ai.check_connection():
         app.status_bar.set_status(ModelStatus.READY)
     else:
-        app.status_bar.set_status(ModelStatus.IDLE)
+        app.status_bar.set_status(ModelStatus.ERROR)
     
     settings = await app.services.db.get_settings()
     if settings.language == "auto":
