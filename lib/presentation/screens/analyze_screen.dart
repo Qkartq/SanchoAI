@@ -2,9 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:permission_handler/permission_handler.dart';
 import '../providers/model_provider.dart';
 import '../../data/datasources/document_service.dart';
 import '../../domain/entities/model_state.dart';
@@ -32,26 +30,9 @@ class _AnalyzeScreenState extends ConsumerState<AnalyzeScreen> {
   }
 
   Future<void> _pickImage() async {
-    final status = await Permission.camera.request();
-    if (!status.isGranted) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Camera permission required')),
-        );
-      }
-      return;
-    }
-
-    final picker = ImagePicker();
-    final image = await picker.pickImage(source: ImageSource.gallery);
-    
-    if (image != null) {
-      setState(() {
-        _selectedImagePath = image.path;
-        _selectedDocumentPath = null;
-        _result = null;
-      });
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Image analysis is not yet supported. Coming soon!')),
+    );
   }
 
   Future<void> _pickDocument() async {
@@ -70,8 +51,8 @@ class _AnalyzeScreenState extends ConsumerState<AnalyzeScreen> {
   }
 
   Future<void> _analyze() async {
-    final modelState = ref.read(modelStateProvider).valueOrNull;
-    if (modelState == null || modelState.status != ModelStatus.ready) {
+    final modelState = ref.read(modelStateProvider);
+    if (modelState.status != ModelStatus.ready) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Model not loaded. Configure in Settings first.')),
@@ -99,6 +80,14 @@ class _AnalyzeScreenState extends ConsumerState<AnalyzeScreen> {
       String response;
       
       if (_selectedImagePath != null) {
+        if (!modelState.hasMultimodal) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Image analysis requires a multimodal (vision) model. Please configure mmproj in Settings.')),
+            );
+          }
+          return;
+        }
         response = await llamaService.analyzeImage(_selectedImagePath!, _promptController.text);
       } else if (_selectedDocumentPath != null) {
         final content = await docService.extractText(_selectedDocumentPath!);
@@ -126,7 +115,7 @@ class _AnalyzeScreenState extends ConsumerState<AnalyzeScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final modelState = ref.watch(modelStateProvider);
-    final hasMultimodal = modelState.valueOrNull?.hasMultimodal ?? false;
+    final hasMultimodal = modelState.hasMultimodal;
 
     return Scaffold(
       appBar: AppBar(
@@ -166,14 +155,12 @@ class _AnalyzeScreenState extends ConsumerState<AnalyzeScreen> {
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: _pickImage,
+                    onPressed: null,
                     icon: const Icon(Icons.image),
-                    label: const Text('Image'),
+                    label: const Text('Image (Coming Soon)'),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.all(16),
-                      backgroundColor: _selectedImagePath != null
-                          ? theme.colorScheme.primaryContainer
-                          : null,
+                      backgroundColor: theme.colorScheme.surfaceContainerHighest,
                     ),
                   ),
                 ),
@@ -193,23 +180,6 @@ class _AnalyzeScreenState extends ConsumerState<AnalyzeScreen> {
                 ),
               ],
             ),
-            if (_selectedImagePath != null) ...[
-              const SizedBox(height: 16),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.file(
-                  File(_selectedImagePath!),
-                  height: 200,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _selectedImagePath!.split('/').last,
-                style: theme.textTheme.bodySmall,
-              ),
-            ],
             if (_selectedDocumentPath != null) ...[
               const SizedBox(height: 16),
               Container(

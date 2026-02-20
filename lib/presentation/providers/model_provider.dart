@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/entities/model_state.dart';
+import '../../domain/entities/app_settings.dart';
 import '../../data/datasources/llama_service.dart';
 import 'settings_provider.dart';
 
@@ -63,14 +64,25 @@ final initializeModelProvider = Provider<Future<void> Function()>((ref) {
   };
 });
 
-final autoLoadModelProvider = Provider<void>((ref) {
-  final settings = ref.watch(settingsProvider);
-  settings.whenData((s) {
-    if (s.modelPath.isNotEmpty) {
-      Future.microtask(() {
-        final init = ref.read(initializeModelProvider);
-        init();
-      });
-    }
-  });
+final autoLoadModelProvider = StateNotifierProvider<AutoLoadModelNotifier, void>((ref) {
+  return AutoLoadModelNotifier(ref);
 });
+
+class AutoLoadModelNotifier extends StateNotifier<void> {
+  final Ref _ref;
+  String? _lastModelPath;
+
+  AutoLoadModelNotifier(this._ref) : super(null) {
+    _ref.listen<AsyncValue<AppSettings>>(settingsProvider, (previous, next) {
+      next.whenData((settings) {
+        if (_lastModelPath != null && _lastModelPath != settings.modelPath) {
+          Future.microtask(() {
+            final init = _ref.read(initializeModelProvider);
+            init();
+          });
+        }
+        _lastModelPath = settings.modelPath;
+      });
+    });
+  }
+}

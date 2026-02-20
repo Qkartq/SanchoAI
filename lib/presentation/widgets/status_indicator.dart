@@ -23,51 +23,47 @@ class StatusIndicator extends StatelessWidget {
           color: _getBackgroundColor().withOpacity(0.4),
           width: 1.5,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: _getBackgroundColor().withOpacity(0.2),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _buildIcon(),
-          const SizedBox(width: 6),
-          Text(
-            _getStatusText(),
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: _getBackgroundColor(),
-              letterSpacing: 0.3,
-            ),
-          ),
-          if (showProgress && modelState.status == ModelStatus.loading) ...[
-            const SizedBox(width: 8),
-            SizedBox(
-              width: 12,
-              height: 12,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(_getBackgroundColor()),
-              ),
-            ),
-          ],
-          if (modelState.status == ModelStatus.loading && modelState.progress > 0) ...[
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildIcon(),
             const SizedBox(width: 6),
             Text(
-              '${(modelState.progress * 100).toInt()}%',
+              _getStatusText(),
               style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
-                color: _getBackgroundColor().withOpacity(0.8),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: _getBackgroundColor(),
+                letterSpacing: 0.3,
               ),
             ),
+            if (showProgress && modelState.status == ModelStatus.loading) ...[
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(_getBackgroundColor()),
+                ),
+              ),
+            ],
+            if (modelState.status == ModelStatus.loading && modelState.progress > 0) ...[
+              const SizedBox(width: 6),
+              Text(
+                '${(modelState.progress * 100).toInt()}%',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  color: _getBackgroundColor().withOpacity(0.8),
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

@@ -113,6 +113,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ),
                       ),
                     ),
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.image),
+                      title: const Text('Vision Model (mmproj)'),
+                      subtitle: Text(s.mmprojPath.isEmpty ? 'Not selected (optional)' : s.mmprojPath.split('/').last),
+                      trailing: TextButton(
+                        onPressed: () => _pickMmprojFile(context, ref),
+                        child: const Text('Select'),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -246,6 +256,33 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       }
     } catch (e) {
       debugPrint('Error picking model file: $e');
+    }
+  }
+
+  Future<void> _pickMmprojFile(BuildContext context, WidgetRef ref) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        allowMultiple: false,
+      );
+      
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        if (file.path != null && file.path!.isNotEmpty) {
+          await ref.read(settingsProvider.notifier).setMmprojPath(file.path!);
+          
+          final init = ref.read(initializeModelProvider);
+          await init();
+          
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Vision model loaded: ${file.name}')),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error picking mmproj file: $e');
     }
   }
 

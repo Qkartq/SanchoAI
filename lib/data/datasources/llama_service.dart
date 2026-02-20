@@ -49,6 +49,16 @@ class LlamaService {
       debugPrint('Model file exists, creating controller...');
       _controller = LlamaController();
       
+      bool hasMmproj = mmprojPath != null && mmprojPath.isNotEmpty;
+      
+      if (hasMmproj) {
+        final mmprojFile = File(mmprojPath);
+        if (!await mmprojFile.exists()) {
+          debugPrint('Warning: mmproj file not found, disabling multimodal');
+          hasMmproj = false;
+        }
+      }
+      
       debugPrint('Loading model with $nThreads threads, context: $contextWindow');
       await _controller!.loadModel(
         modelPath: modelPath,
@@ -56,10 +66,10 @@ class LlamaService {
         contextSize: contextWindow,
       );
       
-      debugPrint('Model loaded successfully!');
+      debugPrint('Model loaded successfully! hasMultimodal: $hasMmproj');
       _updateState(ModelState(
         status: ModelStatus.ready,
-        hasMultimodal: false,
+        hasMultimodal: hasMmproj,
       ));
     } catch (e) {
       debugPrint('Error loading model: $e');
@@ -73,8 +83,9 @@ class LlamaService {
   String _buildPrompt(String message, List<Map<String, String>>? history) {
     final buffer = StringBuffer();
     
-    buffer.writeln('Instruction: $_systemPrompt');
-    buffer.writeln('Rules: 1) Only respond as Assistant. 2) Never repeat user messages. 3) Never generate messages for User. 4) Answer directly and concisely.');
+    buffer.writeln('<|system|>');
+    buffer.writeln(_systemPrompt);
+    buffer.writeln('</s>');
     buffer.writeln();
     
     if (history != null) {
@@ -83,17 +94,53 @@ class LlamaService {
         final content = msg['content'] ?? '';
         if (content.isNotEmpty) {
           if (role == 'user') {
-            buffer.writeln('User: $content');
+            buffer.writeln('<|user|>');
+            buffer.writeln(content);
           } else if (role == 'assistant') {
-            buffer.writeln('Assistant: $content');
+            buffer.writeln('<|assistant|>');
+            buffer.writeln(content);
+            buffer.writeln('</s>');
           }
         }
       }
     }
     
-    buffer.writeln('User: $message');
-    buffer.write('Assistant:');
+    buffer.writeln('<|user|>');
+    buffer.writeln(message);
+    buffer.writeln('</s>');
+    buffer.writeln('<|assistant|>');
     
+    return buffer.toString();
+  }
+
+  String buildContinuePrompt(List<Map<String, String>>? history) {
+    if (history == null || history.isEmpty) {
+      return '';
+    }
+    
+    final buffer = StringBuffer();
+    
+    buffer.writeln('<|system|>');
+    buffer.writeln(_systemPrompt);
+    buffer.writeln('</s>');
+    buffer.writeln();
+    
+    for (final msg in history) {
+      final role = msg['role'] ?? 'user';
+      final content = msg['content'] ?? '';
+      if (content.isNotEmpty) {
+        if (role == 'user') {
+          buffer.writeln('<|user|>');
+          buffer.writeln(content);
+        } else if (role == 'assistant') {
+          buffer.writeln('<|assistant|>');
+          buffer.writeln(content);
+          buffer.writeln('</s>');
+        }
+      }
+    }
+    
+    buffer.write('<|assistant|>');
     return buffer.toString();
   }
 
@@ -139,6 +186,37 @@ class LlamaService {
     
     try {
       final prompt = _buildPrompt(message, history);
+      
+      await for (final token in _controller!.generate(
+        prompt: prompt,
+        temperature: temperature ?? 0.3,
+        topP: 0.8,
+        topK: 40,
+        maxTokens: maxTokens ?? 512,
+        repeatPenalty: 2.0,
+        repeatLastN: 64,
+      )) {
+        yield token;
+      }
+    } finally {
+      _updateState(_state.copyWith(status: ModelStatus.ready));
+    }
+  }
+
+  Stream<String> continueGeneration(List<Map<String, String>>? history, {double? temperature, int? maxTokens}) async* {
+    if (_controller == null) {
+      yield 'Error: Model not loaded';
+      return;
+    }
+    
+    _updateState(_state.copyWith(status: ModelStatus.generating));
+    
+    try {
+      final prompt = buildContinuePrompt(history);
+      if (prompt.isEmpty) {
+        yield 'No conversation history';
+        return;
+      }
       
       await for (final token in _controller!.generate(
         prompt: prompt,

@@ -535,4 +535,59 @@ class HistoryNotifier extends StateNotifier<HistoryState> {
 
     state = state.copyWith(conversations: updatedConvs);
   }
+
+  Future<void> deleteMessage(String messageId) async {
+    if (_storage == null || state.currentConversationId == null) return;
+
+    final convIndex = state.conversations.indexWhere(
+      (c) => c.id == state.currentConversationId,
+    );
+    if (convIndex < 0) return;
+
+    final conv = state.conversations[convIndex];
+    final msgIndex = conv.messages.indexWhere((m) => m.id == messageId);
+    if (msgIndex < 0) return;
+
+    final updatedMessages = [...conv.messages];
+    updatedMessages.removeAt(msgIndex);
+
+    final updatedConv = conv.copyWith(
+      messages: updatedMessages,
+      updatedAt: DateTime.now(),
+    );
+
+    await _storage!.saveConversation(updatedConv);
+
+    final updatedConvs = [...state.conversations];
+    updatedConvs[convIndex] = updatedConv;
+
+    state = state.copyWith(conversations: updatedConvs);
+  }
+
+  Future<void> deleteMessageAndSubsequent(String messageId) async {
+    if (_storage == null || state.currentConversationId == null) return;
+
+    final convIndex = state.conversations.indexWhere(
+      (c) => c.id == state.currentConversationId,
+    );
+    if (convIndex < 0) return;
+
+    final conv = state.conversations[convIndex];
+    final msgIndex = conv.messages.indexWhere((m) => m.id == messageId);
+    if (msgIndex < 0) return;
+
+    final updatedMessages = conv.messages.sublist(0, msgIndex);
+
+    final updatedConv = conv.copyWith(
+      messages: updatedMessages,
+      updatedAt: DateTime.now(),
+    );
+
+    await _storage!.saveConversation(updatedConv);
+
+    final updatedConvs = [...state.conversations];
+    updatedConvs[convIndex] = updatedConv;
+
+    state = state.copyWith(conversations: updatedConvs);
+  }
 }
